@@ -2,7 +2,7 @@
 A python script that connects radio stations to Spotify.
 These scripts automatically checks a radio station's website and add songs that have not yet been added to the playlist.
 
-Technology Used: Python, Spotify API, Google Drive API, OAuth, Webscraping with Beautiful Soup 4, Notivize, Google Compute Engine (VM Instance)
+Technology Used: Python, Spotify API, Google Drive API, OAuth, Webscraping with Beautiful Soup 4, Notivize, Google Compute Engine (VM Instance), MongoDB
 
 The links to the 3 radio stations are listed below:
 
