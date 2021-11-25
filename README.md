@@ -1,5 +1,5 @@
 # radiofetcher
-A python script that connects radio stations to Spotify
+A python script that connects radio stations to Spotify.
 These scripts automatically checks a radio station's website and add songs that have not yet been added to the playlist. The links to the 3 radio stations are listed below:
 
 Wild 94.9: https://open.spotify.com/playlist/1I0G9xjsHyypBjQDMrG04l?si=8d459e5388cf4cfc
