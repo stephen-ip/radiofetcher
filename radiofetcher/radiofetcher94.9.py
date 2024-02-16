@@ -75,8 +75,7 @@ class RadioFetcher:
             return False  # returns False to signify that no new song has been played yet
 
     def search_spotify_for_song(self):  # search spotify for song and append song uri to class list of uris
-        for song_name in list(self.new_songs_dict.keys()):  # go through list dictionary of new songs so we can del keys
-            song_artist = self.new_songs_dict[song_name]
+        for song_name, song_artist in list(self.new_songs_dict.items()):  # go through list dictionary of new songs so we can del keys
             song_name_encoded = urllib.parse.quote(song_name)  # properly format name and artist for search query
             song_artist_encoded = urllib.parse.quote(song_artist)
             query = f"https://api.spotify.com/v1/search?q=track:{song_name_encoded}%20artist:{song_artist_encoded}&type=track"  # Search for an Item using name and artist
