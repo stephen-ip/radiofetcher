@@ -5,6 +5,7 @@ import urllib.parse
 import re
 from pymongo import MongoClient  # pip3 install pymongo + pip3 install pymongo[srv]
 import os
+from datetime import datetime
 
 class RadioFetcher:
 
@@ -64,8 +65,8 @@ class RadioFetcher:
             print("error accessing data base")
             return False  # if an error occurs trying to access data base, stop and try again later
 
-        for song in list(self.new_songs_dict.keys()):  # delete songs that are already in playlist
-            if self.collection.find_one({"track_name": song}):
+        for song, artists in list(self.new_songs_dict.items()):  # delete songs that are already in playlist
+            if self.collection.find_one({"track_name": song, "track_artists": artists}):
                 del self.new_songs_dict[song]
 
         if len(self.new_songs_dict) > 0:  # check if there are new songs to be added
@@ -90,7 +91,8 @@ class RadioFetcher:
                     new_song_document = {  # create new song document to be inserted into the database
                     "track_name": song_name,
                     "track_artists": song_artist,
-                    "added_to_playlist": False
+                    "added_to_playlist": False,
+                    "created_time": datetime.now()
                     }
                     self.collection.insert_one(new_song_document)
                     del self.new_songs_dict[song_name]  # remove the song from showing up on added songs notification
@@ -111,7 +113,8 @@ class RadioFetcher:
                     new_song_document = {  # create new song document to be inserted into the database
                     "track_name": song,
                     "track_artists": self.new_songs_dict[song],
-                    "added_to_playlist": True
+                    "added_to_playlist": True,
+                    "created_time": datetime.now()
                     }
                     new_song_documents_array.append(new_song_document)
                 else:
