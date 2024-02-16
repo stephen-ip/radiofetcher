@@ -1,35 +1,21 @@
-# 94.9 RADIO STATION
-
 from bs4 import BeautifulSoup
 import requests
 import json
 import urllib.parse
 import re
-import ast
-import time
-import sys
-
-import pickle
-import os.path
-from googleapiclient.discovery import build
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.http import MediaFileUpload
-
+from pymongo import MongoClient  # pip3 install pymongo + pip3 install pymongo[srv]
+import os
 
 class RadioFetcher:
 
     def __init__(self):
-        self.api_token = ""  # generated using the refresh function
-        self.refresh_token = "REDACTED"  # allow access to make new api tokens
-        self.base_64 = "REDACTED"  # encoded credentials of clientID:clientSecret
-        self.playlist_id = "1I0G9xjsHyypBjQDMrG04l"  # "6DhnaaoaSmVaafoErrj3PH" - test playlist
+        self.api_token = ""
+        self.refresh_token = os.environ['SPOTIFY_REFRESH_TOKEN']  # allow access to make new api tokens
+        self.base_64 = os.environ['SPOTIFY_BASE_64']  # encoded credentials of clientID:clientSecret
+        self.playlist_id = os.environ['PLAYLIST_ID']
         self.radio_site_url = "https://wild949.iheart.com/music/recently-played/"
-        try:  # create a dictionary to hold all song names as keys and song artists as values in playlist
-            with open('saved_songs.txt', 'r') as f:  # see if there is a saved version of the songs_dict
-                self.songs_dict = ast.literal_eval(f.read())  # interpret the saved string as a dictionary
-        except Exception:  # if there is an error or no saved version of the songs_dict:
-            self.songs_dict = dict()  # just create an empty songs_dict
+        self.CONNECTION_STRING = os.environ['MONGO_DB_CONNECTION_STRING']
+        self.collection = None
         self.new_songs_dict = dict()  # a dictionary of songs to be added
         self.song_uris = []  # temp storage to hold package of new song uris to send to playlist
 
@@ -72,8 +58,14 @@ class RadioFetcher:
         for s, a in zip(list_songs, list_artists):  # create a new dictionary of updated recently played songs to match song to artist
             self.new_songs_dict[s] = a
 
+        try:
+            self.collection = self.get_database_collection()
+        except Exception:
+            print("error accessing data base")
+            return False  # if an error occurs trying to access data base, stop and try again later
+
         for song in list(self.new_songs_dict.keys()):  # delete songs that are already in playlist
-            if song in self.songs_dict.keys():
+            if self.collection.find_one({"track_name": song}):
                 del self.new_songs_dict[song]
 
         if len(self.new_songs_dict) > 0:  # check if there are new songs to be added
@@ -95,12 +87,15 @@ class RadioFetcher:
                     self.song_uris.append(response_json["tracks"]["items"][0]["uri"])  # choose the first result from the search and add its uri to the list
                 else:
                     print("failed to find:", song_name, "by", song_artist)
-                    sys.stdout.flush()
-                    self.songs_dict[song_name] = song_artist  # preemptively add the song to the dictionary so it does not show up in the update
+                    new_song_document = {  # create new song document to be inserted into the database
+                    "track_name": song_name,
+                    "track_artists": song_artist,
+                    "added_to_playlist": False
+                    }
+                    self.collection.insert_one(new_song_document)
                     del self.new_songs_dict[song_name]  # remove the song from showing up on added songs notification
             else:
                 print("failed to search for song - error code:", response.status_code)
-                sys.stdout.flush()
                 del self.new_songs_dict[song_name]  # remove the song from showing up on added songs notification
                 # do not add to the song dictionary so it can retry again next iteration
 
@@ -111,27 +106,22 @@ class RadioFetcher:
             response = requests.post(query, data=request_data, headers={"Content-Type": "application/json",
                                                                         "Authorization": f"Bearer {self.api_token}"})
             if response.status_code == 201:  # in case of failure in request (201 is success)
+                new_song_documents_array = []
                 for song in self.new_songs_dict.keys():  # adding the new songs to the main dictionary
-                    self.songs_dict[song] = self.new_songs_dict[song]
+                    new_song_document = {  # create new song document to be inserted into the database
+                    "track_name": song,
+                    "track_artists": self.new_songs_dict[song],
+                    "added_to_playlist": True
+                    }
+                    new_song_documents_array.append(new_song_document)
                 else:
                     print("playlist updated - added:", self.new_songs_dict)
-                    sys.stdout.flush()
                     try:
-                        with open('saved_songs.txt', 'w') as f:  # save new iteration of songs_dict to backup
-                            f.write(str(self.songs_dict))
-                        self.update_google_drive()
-                        # send notification
-                        new_songs_dict_str = str(self.new_songs_dict)
-                        response = requests.post(
-                            'https://events-api.notivize.com/applications/REDACTED',
-                            json={'lifecycle_stage': 'update', 'self.new_songs_dict': new_songs_dict_str,
-                                  'songs_dict': 'saved_songs.txt', 'user_email': 'stephencfip@gmail.com'},
-                            headers={'Authorization': 'REDACTED'})
+                        self.collection.insert_many(new_song_documents_array)
                     except Exception:
-                        pass
+                        print("failed to insert data into database")
             else:
                 print("error code:", response.status_code, "failed to add:", self.new_songs_dict)
-                sys.stdout.flush()
             self.song_uris.clear()  # clear song uris after adding them
             self.new_songs_dict.clear()  # clear new_songs dictionary
 
@@ -143,39 +133,14 @@ class RadioFetcher:
             response_json = response.json()
             self.api_token = response_json["access_token"]  # reset api_token
 
-    def update_google_drive(self):
-        try:
-            credentials = None
-            SCOPES = ['https://www.googleapis.com/auth/drive']
-            if os.path.exists('token.pickle'):
-                with open('token.pickle', 'rb') as token:
-                    credentials = pickle.load(token)
-            if not credentials or not credentials.valid:
-                if credentials and credentials.expired and credentials.refresh_token:
-                    credentials.refresh(Request())
-                else:
-                    print("NEED MANUAL AUTHENTICATION OF CREDENTIALS")
-                    # flow = InstalledAppFlow.from_client_secrets_file(
-                    #    'credentials.json', SCOPES)
-                    # credentials = flow.run_local_server(port=0)
-                with open("token.pickle", "wb") as token:
-                    pickle.dump(credentials, token)
-            service = build('drive', 'v3', credentials=credentials)
-            file_id = "REDACTED"
-            media = MediaFileUpload("saved_songs.txt")
-            response = service.files().update(
-                fileId=file_id,
-                media_body=media
-            ).execute()
-        except Exception:
-            print("error backing up to google drive")
+    def get_database_collection(self):  # returns the mongoDB data base collection for this project
+        client = MongoClient(self.CONNECTION_STRING)
+        database = client['saved_songs']
+        return database["WILD_94.9"]
 
-
-program = RadioFetcher()
-while True:
+def lambda_handler(event, context):
+    program = RadioFetcher()
     program.refresh_api()
     if program.find_song_on_site():
         program.search_spotify_for_song()
         program.add_song_to_playlist()
-    time.sleep(60)  # add delay (60 seconds) between loops to reduce stress
-
