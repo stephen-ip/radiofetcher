@@ -107,21 +107,20 @@ class RadioFetcher:
             response = requests.post(query, data=request_data, headers={"Content-Type": "application/json",
                                                                         "Authorization": f"Bearer {self.api_token}"})
             if response.status_code == 201:  # in case of failure in request (201 is success)
+                print("playlist updated - added:", self.new_songs_dict)
                 new_song_documents_array = []
-                for song in self.new_songs_dict.keys():  # adding the new songs to the main dictionary
+                for song, artists in self.new_songs_dict.items():  # adding the new songs to the main dictionary
                     new_song_document = {  # create new song document to be inserted into the database
                     "track_name": song,
-                    "track_artists": self.new_songs_dict[song],
+                    "track_artists": artists,
                     "added_to_playlist": True,
                     "created_time": datetime.now()
                     }
                     new_song_documents_array.append(new_song_document)
-                else:
-                    print("playlist updated - added:", self.new_songs_dict)
-                    try:
-                        self.collection.insert_many(new_song_documents_array)
-                    except Exception:
-                        print("failed to insert data into database")
+                try:
+                    self.collection.insert_many(new_song_documents_array)
+                except Exception:
+                    print("failed to insert data into database")
             else:
                 print("error code:", response.status_code, "failed to add:", self.new_songs_dict)
             self.song_uris.clear()  # clear song uris after adding them
